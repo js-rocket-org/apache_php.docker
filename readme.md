@@ -24,7 +24,8 @@ if not it will automatically start it before runing the Apache stack
 
 # Adding new site
 
-To add a new site, simply copy the example configuration file 000-example.conf_template and name appropriately
+To add a new site, simply copy the example configuration file from `.docker/sites-enabled/000-example.conf_template` into the same folder 
+and rename to end with `.conf`.  Then update the variables in the file to the appropriate values.
 
 # Enabling SSL for local sites
 
