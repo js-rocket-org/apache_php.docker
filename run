@@ -1,0 +1,139 @@
+#!/bin/sh
+APP_NAME=apache_php
+NET_NAME=bridge1
+WEBROOT=~/www
+SSL_CA_PASSPHRASE=your_password_goes_here_980630
+# comment out line below if you want to start database manually, otherwise set to automatically start DB
+DATABASE_CONTAINER_NAME=mysql55
+DATABASE_CONTAINER_PATH=~/docker/mysql55.docker
+
+docker_create_bridge() {
+  docker network create $NET_NAME
+}
+
+docker_build() {
+  docker build -t $APP_NAME:latest ./.docker
+}
+
+# Start database if it is not already running
+docker_checkrun_db() {
+  if [ ! -z "$DATABASE_CONTAINER_NAME" ]; then
+    if [ ! "$(docker ps -q -f name=$DATABASE_CONTAINER_NAME)" ]; then
+      pushd $DATABASE_CONTAINER_PATH
+      ./run start
+      popd
+    fi
+  fi
+}
+
+docker_start() {
+  docker_checkrun_db
+  docker_stop
+  docker run -dit --rm \
+  --name $APP_NAME \
+  --net $NET_NAME \
+  -v $WEBROOT:/var/www/html \
+  -v $PWD/logs-apache:/var/log/apache2 \
+  -v $PWD/.docker/sites-enabled:/etc/apache2/sites-enabled \
+  -v $PWD/.docker/apachessl:/etc/ssl/apachessl \
+  -p 80:80 \
+  -p 443:443 \
+  -t \
+  $APP_NAME \
+  /opt/runcmd.sh
+}
+
+docker_reload() {
+  docker exec -it $APP_NAME apachectl -k graceful
+}
+
+docker_stop() {
+  docker stop -t 2 $APP_NAME
+}
+
+docker_term() {
+  docker exec -it $APP_NAME /bin/bash
+}
+
+create_sslca() {
+  # Create your own certificate authority certificate to sign other certificates
+  # The CA certificate my_ssl_ca.pem only needs to be imported into your computer once.
+  # on a Mac after import, you must select certificate in keychain, right click Get Info then select
+  # Trust -> Always trust
+
+  if [ -f my_ssl_ca.pem ]; then
+    echo "CA root certificate already exist!  Delete my_ssl_ca.* if you want to generate new files"
+    exit 0
+  fi
+
+  # Generate private key for CA cert
+  openssl genrsa -des3 -passout pass:$SSL_CA_PASSPHRASE -out my_ssl_ca.key 2048
+
+  # Generate root certificate for CA - the .srl file will be generated on first request
+  openssl req -x509 -new -nodes -key my_ssl_ca.key -sha256 -days 825 -passin pass:$SSL_CA_PASSPHRASE -out my_ssl_ca.pem \
+    -subj "/C=AU/ST=New South Wales/L=Sydney/O=Example Co/OU=IT/CN=Local Self Signed CA/emailAddress=dev@example.com"
+
+  # show generated certificate
+  openssl x509 -noout -text -in my_ssl_ca.pem
+}
+
+create_sslcert() {
+  DOMAIN=$1
+
+  # Generate a private key
+  openssl genrsa -out $DOMAIN.key 2048
+
+  # Create a certificate-signing request
+  openssl req -new -key $DOMAIN.key -out $DOMAIN.csr \
+    -subj "/C=AU/ST=New South Wales/L=Sydney/O=Example Co/OU=IT/CN=$DOMAIN/emailAddress=dev@example.com"
+
+  # Create a config file for the extensions
+>$DOMAIN.ext cat <<EOF
+authorityKeyIdentifier=keyid,issuer
+basicConstraints=CA:FALSE
+keyUsage = digitalSignature, nonRepudiation, keyEncipherment, dataEncipherment
+subjectAltName = @alt_names
+[alt_names]
+DNS.1 = $DOMAIN # Be sure to include the domain name here because Common Name is not so commonly honoured by itself
+# DNS.2 = www1.$DOMAIN # Optionally, add additional domains (I've added a subdomain here)
+# IP.1 = 192.168.0.13 # Optionally, add an IP address (if the connection which you have planned requires it)
+EOF
+
+  # Create the signed certificate 
+  openssl x509 -req -in $DOMAIN.csr -CA my_ssl_ca.pem -CAkey my_ssl_ca.key -CAcreateserial \
+    -passin pass:$SSL_CA_PASSPHRASE -out $DOMAIN.crt -days 825 -sha256 -extfile $DOMAIN.ext
+
+  # remove temporay request and extension files
+  rm $DOMAIN.ext $DOMAIN.csr
+
+  # move into container SSL folder
+  mv $DOMAIN.crt ./.docker/apachessl/
+  mv $DOMAIN.key ./.docker/apachessl/
+}
+
+docker_dev() {
+  docker run -dit --rm \
+  --name ubudev \
+  --net $NET_NAME \
+  -v $PWD/data:/opt/data \
+  -t \
+  ubuntu:focal \
+  /bin/bash
+}
+
+docker_devterm() {
+  docker exec -it ubudev /bin/bash
+}
+
+if [ "$1" == "bridge" ]; then docker_create_bridge; fi
+if [ "$1" == "build" ]; then docker_build; fi
+if [ "$1" == "start" ]; then docker_start; fi
+if [ "$1" == "reload" ]; then docker_reload; fi
+if [ "$1" == "stop" ]; then docker_stop; fi
+if [ "$1" == "term" ]; then docker_term; fi
+if [ "$1" == "sslca" ]; then create_sslca $2; fi
+if [ "$1" == "sslcert" ]; then create_sslcert $2; fi
+
+# For development when contructing container
+if [ "$1" == "dev" ]; then docker_dev; fi
+if [ "$1" == "devterm" ]; then docker_devterm; fi

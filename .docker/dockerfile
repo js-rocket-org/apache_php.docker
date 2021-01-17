@@ -1,0 +1,50 @@
+FROM ubuntu:focal
+
+LABEL author="js@rokt.io"
+
+ENV DEBIAN_FRONTEND noninteractive
+
+RUN apt-get update
+RUN apt-get upgrade -y
+
+# install apache, mysql client and other tools
+RUN apt-get -y --no-install-recommends install apache2 apache2-utils libapache2-mod-fcgid \
+  mysql-client postgresql-client \
+  curl gnupg2 ca-certificates postfix memcached
+
+RUN a2enmod actions fcgid alias proxy_fcgi rewrite setenvif deflate ssl
+
+# install same version of php that comes with this version of ubuntu (7.4).  New projects should use this version
+RUN apt-get -y --no-install-recommends install php7.4-fpm php7.4-json php7.4-pdo php7.4-mysql php7.4-pgsql \
+  php7.4-zip php7.4-gd php7.4-mbstring php7.4-curl php7.4-xml php7.4-bcmath php-memcached
+
+
+# install repository that has other PHP versions
+# Below three lines saves having to install and use add-apt-repository which will add about 100MB
+# Get key and launchpad URL from here https://launchpad.net/~ondrej/+archive/ubuntu/php/
+# NOTE: Ondrej Sury is one of the maintainers for PHP for debian, so his repo is relatively trustworthy
+# If changing repos in the future, ensure that source is also trustworthy
+RUN sh -c 'echo "deb http://ppa.launchpad.net/ondrej/php/ubuntu focal main" > /etc/apt/sources.list.d/sury_org.list'
+RUN apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 4f4ea0aae5267a6c
+RUN apt-get update
+
+# Install PHP 7.3
+RUN apt-get -y --no-install-recommends install php7.3-fpm php7.3-json php7.3-pdo php7.3-mysql php7.3-pgsql \
+  php7.3-zip php7.3-gd php7.3-mbstring php7.3-curl php7.3-xml php7.3-bcmath php7.3-memcached
+
+# Install PHP 5.6
+RUN apt-get -y --no-install-recommends install php5.6-fpm php5.6-json php5.6-pdo php5.6-mysql php5.6-pgsql \
+  php5.6-zip php5.6-gd php5.6-mbstring php5.6-curl php5.6-xml php5.6-bcmath php5.6-memcached
+
+# Clean up apt package lists.
+# RUN rm -rf /var/lib/apt/lists/*
+
+# copy startup script into container and set to run
+COPY runcmd.sh /opt/runcmd.sh
+CMD ["/opt/runcmd.sh"]
+
+# expose web ports
+EXPOSE 80 443
+
+# run it
+WORKDIR /opt

@@ -1,0 +1,1 @@
+This folder holds apache log files

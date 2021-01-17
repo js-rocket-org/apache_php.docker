@@ -1,0 +1,11 @@
+# To add a new site simply copy this file, rename and update the host name and path below
+# Note HOST_PATH is path of root web folder inside the container.
+# This maps to your WEBROOT folder defined in the 'run' script
+
+Define HOST_PATH /var/www/html
+Define HOST_NAME localhost
+
+Define PHP_VERSION 7.4
+Undefine HAS_SSL
+
+Include "sites-enabled/000-common.config"
