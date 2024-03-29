@@ -1,8 +1,12 @@
-FROM ubuntu:focal
+FROM debian:12-slim
 
 LABEL author="js@rokt.io"
 
 ENV DEBIAN_FRONTEND noninteractive
+
+# Use local repository
+RUN echo "deb [trusted=yes arch=amd64] http://172.20.0.1:49200/repo stable main non-free-firmware" > /etc/apt/sources.list
+RUN mv /etc/apt/sources.list.d/debian.sources /etc/apt/sources.list.d/debian.disabled
 
 RUN apt-get update
 RUN apt-get upgrade -y
